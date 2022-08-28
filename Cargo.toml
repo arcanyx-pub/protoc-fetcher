@@ -1,0 +1,21 @@
+[package]
+name = "protoc-fetcher"
+authors = ["Joe Dahlquist <joe@arcanyx.com>"]
+categories = ["compilers", "development-tools::build-utils", "parsing", "web-programming", "network-programming"]
+description = "Fetches official Protocol Buffer compiler (protoc) releases for use in build scripts"
+documentation = "https://docs.rs/protoc-fetcher"
+edition = "2021"
+homepage = "https://github.com/arcanyx-pub/protoc-fetcher"
+keywords = ["protoc", "grpc", "tonic", "protobuf", "prost"]
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/arcanyx-pub/protoc-fetcher"
+version = "0.1.0"
+
+[dependencies]
+anyhow = "1.*"
+reqwest = { version = "0.11.*", features = ["blocking"] }
+zip-extract = { version = "^0.1.1", features = ["deflate"] }
+
+[dev-dependencies]
+tonic-build = "0.8.*"
