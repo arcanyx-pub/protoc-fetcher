@@ -91,7 +91,12 @@ fn download_protoc(protoc_dir: &Path, release_name: &str, version: &str) -> anyh
     zip_extract::extract(cursor, protoc_dir, false)?;
     println!("Extracted archive.");
 
+    #[cfg(unix)]
     let protoc_path = protoc_dir.join("bin/protoc");
+
+    #[cfg(windows)]
+    let protoc_path = protoc_dir.join("bin/protoc.exe");
+
     if !protoc_path.exists() {
         bail!("Extracted protoc archive, but could not find bin/protoc!");
     }
