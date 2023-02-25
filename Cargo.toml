@@ -15,7 +15,10 @@ version = "0.1.0"
 [dependencies]
 anyhow = "1.*"
 reqwest = { version = "0.11.*", features = ["blocking"] }
-zip-extract = { version = "^0.1.1", features = ["deflate"] }
+
+zip-extract.git = "https://github.com/nathan-at-least/zip-extract.git"
+zip-extract.branch = "resolve-RUSTSEC-2018-0017"
+zip-extract.features = ["deflate"]
 
 [dev-dependencies]
 tonic-build = "0.8.*"
