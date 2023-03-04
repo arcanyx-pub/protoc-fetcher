@@ -15,7 +15,7 @@ version = "0.1.0"
 [dependencies]
 anyhow = "1.*"
 reqwest = { version = "0.11.*", features = ["blocking"] }
-zip-extract = { version = "^0.1.1", features = ["deflate"] }
+zip-extract = { version = "^0.1.2", features = ["deflate"] }
 
 [dev-dependencies]
 tonic-build = "0.8.*"
