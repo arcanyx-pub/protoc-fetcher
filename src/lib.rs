@@ -1,7 +1,7 @@
 //! Download official protobuf compiler (protoc) releases with a single command, pegged to the
 //! version of your choice.
 
-use anyhow::bail;
+use anyhow::{bail, Context};
 use reqwest::StatusCode;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
@@ -76,7 +76,8 @@ fn ensure_protoc_installed(version: &str, install_dir: &Path) -> anyhow::Result<
 
 fn download_protoc(protoc_dir: &Path, release_name: &str, version: &str) -> anyhow::Result<()> {
     let archive_url = protoc_release_archive_url(release_name, version);
-    let response = reqwest::blocking::get(archive_url)?;
+    let response = reqwest::blocking::get(&archive_url)
+        .with_context(|| format!("Failed to download archive from {}", archive_url))?;
     if response.status() != StatusCode::OK {
         bail!(
             "Error downloading release archive: {} {}",
@@ -86,9 +87,15 @@ fn download_protoc(protoc_dir: &Path, release_name: &str, version: &str) -> anyh
     }
     println!("Download successful.");
 
-    fs::create_dir_all(protoc_dir)?;
+    fs::create_dir_all(protoc_dir)
+        .with_context(|| format!("Failed to create dir: {:?}", protoc_dir))?;
     let cursor = Cursor::new(response.bytes()?);
-    zip_extract::extract(cursor, protoc_dir, false)?;
+    zip_extract::extract(cursor, protoc_dir, false).with_context(|| {
+        format!(
+            "Failed to extract archive to {:?} (from {})",
+            protoc_dir, archive_url
+        )
+    })?;
     println!("Extracted archive.");
 
     let protoc_path = protoc_dir.join("bin/protoc");
@@ -127,6 +134,12 @@ fn get_protoc_release_name(version: &str) -> String {
 }
 
 fn get_protoc_version(protoc_path: &Path) -> anyhow::Result<String> {
-    let version = String::from_utf8(Command::new(&protoc_path).arg("--version").output()?.stdout)?;
+    let version = String::from_utf8(
+        Command::new(&protoc_path)
+            .arg("--version")
+            .output()
+            .with_context(|| format!("Failed to run `{:?} --version`", protoc_path))?
+            .stdout,
+    )?;
     Ok(version)
 }
