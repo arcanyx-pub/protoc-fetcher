@@ -143,3 +143,19 @@ fn get_protoc_version(protoc_path: &Path) -> anyhow::Result<String> {
     let version = String::from_utf8(Command::new(&protoc_path).arg("--version").output()?.stdout)?;
     Ok(version)
 }
+
+#[cfg(test)]
+mod test {
+    use tempfile::tempdir;
+
+    use super::*;
+
+    #[test]
+    fn test_protoc_runs_without_error() {
+        let version = "28.0";
+        let temp_dir = tempdir().unwrap();
+
+        let result = protoc(version, temp_dir.path());
+        assert!(result.is_ok());
+    }
+}
