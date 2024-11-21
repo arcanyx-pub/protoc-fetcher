@@ -1,7 +1,7 @@
 //! Download official protobuf compiler (protoc) releases with a single command, pegged to the
 //! version of your choice.
 
-use anyhow::bail;
+use anyhow::{bail, Context as _};
 use reqwest::StatusCode;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
@@ -76,7 +76,7 @@ fn ensure_protoc_installed(version: &str, install_dir: &Path) -> anyhow::Result<
 
 fn download_protoc(protoc_dir: &Path, release_name: &str, version: &str) -> anyhow::Result<()> {
     let archive_url = protoc_release_archive_url(release_name, version);
-    let response = reqwest::blocking::get(archive_url)?;
+    let response = reqwest::blocking::get(&archive_url)?;
     if response.status() != StatusCode::OK {
         bail!(
             "Error downloading release archive: {} {}",
@@ -88,7 +88,20 @@ fn download_protoc(protoc_dir: &Path, release_name: &str, version: &str) -> anyh
 
     fs::create_dir_all(protoc_dir)?;
     let cursor = Cursor::new(response.bytes()?);
-    zip_extract::extract(cursor, protoc_dir, false)?;
+
+    let mut archive = zip::ZipArchive::new(cursor).with_context(|| {
+        format!(
+            "Failed to create ZipArchive from downloaded archive (from {})",
+            archive_url
+        )
+    })?;
+    archive.extract(protoc_dir).with_context(|| {
+        format!(
+            "Failed to extract archive to {:?} (from {})",
+            protoc_dir, archive_url
+        )
+    })?;
+
     println!("Extracted archive.");
 
     let protoc_path = protoc_dir.join("bin/protoc");
