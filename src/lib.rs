@@ -60,12 +60,22 @@ fn ensure_protoc_installed(version: &str, install_dir: &Path) -> anyhow::Result<
 
     let protoc_dir = install_dir.join(format!("protoc-fetcher/{release_name}"));
     let protoc_path = protoc_dir.join("bin/protoc");
-    if protoc_path.exists() {
-        println!("protoc with correct version is already installed.");
+
+    if wait_for_possible_lock_file(&protoc_dir, version)? {
+        // In the case there was a lock file that disappeared.
+        // Calling the function again will check if the protoc binary is now available,
+        // rather than relying on the other process to finish correctly.
+        return ensure_protoc_installed(version, install_dir);
     } else {
-        println!("protoc v{version} not found, downloading...");
-        download_protoc(&protoc_dir, &release_name, version)?;
+        // In the case there was never a lock file
+        if protoc_path.exists() {
+            println!("protoc with correct version is already installed.");
+        } else {
+            println!("protoc v{version} not found, downloading...");
+            download_protoc_locking(&protoc_dir, &release_name, version)?;
+        }
     }
+
     println!(
         "`protoc --version`: {}",
         get_protoc_version(&protoc_path).unwrap()
@@ -74,6 +84,40 @@ fn ensure_protoc_installed(version: &str, install_dir: &Path) -> anyhow::Result<
     Ok(protoc_path)
 }
 
+/// Wraps the download_protoc function with functionality to create and remove a lock file.
+fn download_protoc_locking(
+    protoc_dir: &Path,
+    release_name: &str,
+    version: &str,
+) -> anyhow::Result<()> {
+    fs::create_dir_all(protoc_dir)
+        .with_context(|| format!("Failed to create dir: {:?}", protoc_dir))?;
+
+    let lock_file = lock_file_path!(protoc_dir);
+    fs::write(&lock_file, "")
+        .with_context(|| format!("Failed to create lock file: {:?}", lock_file))?;
+
+    let result = download_protoc(protoc_dir, release_name, version);
+
+    match &result {
+        Ok(_) => {
+            fs::remove_file(&lock_file)
+                .with_context(|| format!("Failed to remove lock file: {:?}", lock_file))?;
+        }
+        Err(e) => {
+            fs::remove_file(&lock_file).with_context(|| {
+                format!(
+                    "Failed to remove lock file: {:?} after other error {:?}",
+                    lock_file, e
+                )
+            })?;
+        }
+    }
+
+    result
+}
+
+/// Assumes protoc_dir exists and is writable.
 fn download_protoc(protoc_dir: &Path, release_name: &str, version: &str) -> anyhow::Result<()> {
     let archive_url = protoc_release_archive_url(release_name, version);
     let response = reqwest::blocking::get(&archive_url)
@@ -87,8 +131,6 @@ fn download_protoc(protoc_dir: &Path, release_name: &str, version: &str) -> anyh
     }
     println!("Download successful.");
 
-    fs::create_dir_all(protoc_dir)
-        .with_context(|| format!("Failed to create dir: {:?}", protoc_dir))?;
     let cursor = Cursor::new(response.bytes()?);
 
     let mut archive = zip::ZipArchive::new(cursor).with_context(|| {
@@ -151,6 +193,38 @@ fn get_protoc_version(protoc_path: &Path) -> anyhow::Result<String> {
     Ok(version)
 }
 
+macro_rules! lock_file_path {
+    ($dir:expr) => {
+        $dir.join("LOCK")
+    };
+}
+use lock_file_path;
+
+/// Once any lock file no longer exists, returns true if there was one, false if there wasn't.
+/// # Errors
+/// Returns an error if the lock file exists for more than 10 seconds.
+fn wait_for_possible_lock_file(protoc_dir: &Path, version: &str) -> anyhow::Result<bool> {
+    let lock_file = lock_file_path!(protoc_dir);
+
+    if lock_file.exists() {
+        println!(
+            "protoc v{version} not found, but it looks like another process is installing it."
+        );
+        let start = std::time::Instant::now();
+        while lock_file.exists() {
+            if start.elapsed().as_secs() >= 10 {
+                bail!(
+                    "Timeout waiting for the {} file to be removed by other processes.",
+                    lock_file.display()
+                );
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        return Ok(true);
+    }
+    Ok(false)
+}
+
 #[cfg(test)]
 mod test {
     use tempfile::tempdir;
@@ -172,7 +246,7 @@ mod test {
     // i.e. both crates are in the same workspace and download to the same workspace or cache directory, then there will be more than one
     // process trying to download protoc to the same directory.
     // This is the test case for that scenario.
-    fn test_two_processes_on_same_directory_1s_apart_run_without_error() {
+    fn test_two_processes_on_same_directory_1ms_apart_run_without_error() {
         let version = "28.0";
         let temp_dir = tempdir().unwrap();
 
@@ -184,7 +258,7 @@ mod test {
                 let temp_dir = temp_dir.path().to_path_buf();
                 let tx = tx.clone();
                 std::thread::spawn(move || {
-                    std::thread::sleep(std::time::Duration::from_millis(i * 1000));
+                    std::thread::sleep(std::time::Duration::from_millis(i * 1));
                     let result = protoc(&version, &temp_dir);
                     tx.send((i, result)).expect("Failed to send result");
                 })
