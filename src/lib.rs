@@ -143,3 +143,58 @@ fn get_protoc_version(protoc_path: &Path) -> anyhow::Result<String> {
     )?;
     Ok(version)
 }
+
+#[cfg(test)]
+mod test {
+    use tempfile::tempdir;
+
+    use super::*;
+    use googletest::prelude::*;
+
+    #[googletest::test]
+    fn test_protoc_runs_without_error() {
+        let version = "28.0";
+        let temp_dir = tempdir().unwrap();
+
+        let result = protoc(version, temp_dir.path());
+        assert!(result.is_ok());
+    }
+
+    #[googletest::test]
+    // If one crate uses protoc_fetcher to download protoc, and a dependency crate of it also uses protoc_fetcher to the same directory.
+    // i.e. both crates are in the same workspace and download to the same workspace or cache directory, then there will be more than one
+    // process trying to download protoc to the same directory.
+    // This is the test case for that scenario.
+    fn test_two_processes_on_same_directory_1s_apart_run_without_error() {
+        let version = "28.0";
+        let temp_dir = tempdir().unwrap();
+
+        let (tx, rx) = std::sync::mpsc::channel(); // Channel for thread communication
+
+        let handles: Vec<_> = (0..2)
+            .map(|i| {
+                let version = version.to_string();
+                let temp_dir = temp_dir.path().to_path_buf();
+                let tx = tx.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(i * 1000));
+                    let result = protoc(&version, &temp_dir);
+                    tx.send((i, result)).expect("Failed to send result");
+                })
+            })
+            .collect();
+
+        // Wait for all threads to complete
+        for handle in handles {
+            handle.join().expect("Thread panicked");
+        }
+
+        let mut results = rx.iter().take(2).collect::<Vec<_>>();
+        results.sort_by_key(|&(i, _)| i);
+        let result_from_first = &results[0].1;
+        let result_from_second = &results[1].1;
+
+        verify_that!(result_from_first, ok(anything())).and_log_failure();
+        verify_that!(result_from_second, ok(anything())).and_log_failure();
+    }
+}
