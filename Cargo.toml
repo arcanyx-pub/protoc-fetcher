@@ -1,7 +1,13 @@
 [package]
 name = "protoc-fetcher"
 authors = ["Joe Dahlquist <joe@arcanyx.com>"]
-categories = ["compilers", "development-tools::build-utils", "parsing", "web-programming", "network-programming"]
+categories = [
+  "compilers",
+  "development-tools::build-utils",
+  "parsing",
+  "web-programming",
+  "network-programming",
+]
 description = "Fetches official Protocol Buffer compiler (protoc) releases for use in build scripts"
 documentation = "https://docs.rs/protoc-fetcher"
 edition = "2021"
@@ -14,9 +20,9 @@ version = "0.1.1"
 
 [dependencies]
 anyhow = "1.0.81"
-reqwest = { version = "0.11.27", features = ["blocking"] }
+reqwest = { version = "0.12.9", features = ["blocking"] }
 zip = "2.2.0"
 
 [dev-dependencies]
 tempfile = "3.14.0"
-tonic-build = "0.11.0"
+tonic-build = "0.12.3"
