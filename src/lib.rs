@@ -1,7 +1,7 @@
 //! Download official protobuf compiler (protoc) releases with a single command, pegged to the
 //! version of your choice.
 
-use anyhow::{bail, Context};
+use anyhow::{bail, Context as _};
 use reqwest::StatusCode;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
@@ -90,7 +90,14 @@ fn download_protoc(protoc_dir: &Path, release_name: &str, version: &str) -> anyh
     fs::create_dir_all(protoc_dir)
         .with_context(|| format!("Failed to create dir: {:?}", protoc_dir))?;
     let cursor = Cursor::new(response.bytes()?);
-    zip_extract::extract(cursor, protoc_dir, false).with_context(|| {
+
+    let mut archive = zip::ZipArchive::new(cursor).with_context(|| {
+        format!(
+            "Failed to create ZipArchive from downloaded archive (from {})",
+            archive_url
+        )
+    })?;
+    archive.extract(protoc_dir).with_context(|| {
         format!(
             "Failed to extract archive to {:?} (from {})",
             protoc_dir, archive_url
