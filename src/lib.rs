@@ -1,7 +1,7 @@
 //! Download official protobuf compiler (protoc) releases with a single command, pegged to the
 //! version of your choice.
 
-use anyhow::bail;
+use anyhow::{bail, Context as _};
 use reqwest::StatusCode;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
@@ -60,12 +60,22 @@ fn ensure_protoc_installed(version: &str, install_dir: &Path) -> anyhow::Result<
 
     let protoc_dir = install_dir.join(format!("protoc-fetcher/{release_name}"));
     let protoc_path = protoc_dir.join("bin/protoc");
-    if protoc_path.exists() {
-        println!("protoc with correct version is already installed.");
+
+    if wait_for_possible_lock_file(&protoc_dir, version)? {
+        // In the case there was a lock file that disappeared.
+        // Calling the function again will check if the protoc binary is now available,
+        // rather than relying on the other process to finish correctly.
+        return ensure_protoc_installed(version, install_dir);
     } else {
-        println!("protoc v{version} not found, downloading...");
-        download_protoc(&protoc_dir, &release_name, version)?;
+        // In the case there was never a lock file
+        if protoc_path.exists() {
+            println!("protoc with correct version is already installed.");
+        } else {
+            println!("protoc v{version} not found, downloading...");
+            download_protoc_locking(&protoc_dir, &release_name, version)?;
+        }
     }
+
     println!(
         "`protoc --version`: {}",
         get_protoc_version(&protoc_path).unwrap()
@@ -74,9 +84,44 @@ fn ensure_protoc_installed(version: &str, install_dir: &Path) -> anyhow::Result<
     Ok(protoc_path)
 }
 
+/// Wraps the download_protoc function with functionality to create and remove a lock file.
+fn download_protoc_locking(
+    protoc_dir: &Path,
+    release_name: &str,
+    version: &str,
+) -> anyhow::Result<()> {
+    fs::create_dir_all(protoc_dir)
+        .with_context(|| format!("Failed to create dir: {:?}", protoc_dir))?;
+
+    let lock_file = lock_file_path!(protoc_dir);
+    fs::write(&lock_file, "")
+        .with_context(|| format!("Failed to create lock file: {:?}", lock_file))?;
+
+    let result = download_protoc(protoc_dir, release_name, version);
+
+    match &result {
+        Ok(_) => {
+            fs::remove_file(&lock_file)
+                .with_context(|| format!("Failed to remove lock file: {:?}", lock_file))?;
+        }
+        Err(e) => {
+            fs::remove_file(&lock_file).with_context(|| {
+                format!(
+                    "Failed to remove lock file: {:?} after other error {:?}",
+                    lock_file, e
+                )
+            })?;
+        }
+    }
+
+    result
+}
+
+/// Assumes protoc_dir exists and is writable.
 fn download_protoc(protoc_dir: &Path, release_name: &str, version: &str) -> anyhow::Result<()> {
     let archive_url = protoc_release_archive_url(release_name, version);
-    let response = reqwest::blocking::get(archive_url)?;
+    let response = reqwest::blocking::get(&archive_url)
+        .with_context(|| format!("Failed to download archive from {}", archive_url))?;
     if response.status() != StatusCode::OK {
         bail!(
             "Error downloading release archive: {} {}",
@@ -86,9 +131,20 @@ fn download_protoc(protoc_dir: &Path, release_name: &str, version: &str) -> anyh
     }
     println!("Download successful.");
 
-    fs::create_dir_all(protoc_dir)?;
     let cursor = Cursor::new(response.bytes()?);
-    zip_extract::extract(cursor, protoc_dir, false)?;
+
+    let mut archive = zip::ZipArchive::new(cursor).with_context(|| {
+        format!(
+            "Failed to create ZipArchive from downloaded archive (from {})",
+            archive_url
+        )
+    })?;
+    archive.extract(protoc_dir).with_context(|| {
+        format!(
+            "Failed to extract archive to {:?} (from {})",
+            protoc_dir, archive_url
+        )
+    })?;
     println!("Extracted archive.");
 
     #[cfg(unix)]
@@ -156,6 +212,99 @@ fn get_protoc_release_name(version: &str) -> String {
 }
 
 fn get_protoc_version(protoc_path: &Path) -> anyhow::Result<String> {
-    let version = String::from_utf8(Command::new(&protoc_path).arg("--version").output()?.stdout)?;
+    let version = String::from_utf8(
+        Command::new(&protoc_path)
+            .arg("--version")
+            .output()
+            .with_context(|| format!("Failed to run `{:?} --version`", protoc_path))?
+            .stdout,
+    )?;
     Ok(version)
+}
+
+macro_rules! lock_file_path {
+    ($dir:expr) => {
+        $dir.join("LOCK")
+    };
+}
+use lock_file_path;
+
+/// Once any lock file no longer exists, returns true if there was one, false if there wasn't.
+/// # Errors
+/// Returns an error if the lock file exists for more than 10 seconds.
+fn wait_for_possible_lock_file(protoc_dir: &Path, version: &str) -> anyhow::Result<bool> {
+    let lock_file = lock_file_path!(protoc_dir);
+
+    if lock_file.exists() {
+        println!(
+            "protoc v{version} not found, but it looks like another process is installing it."
+        );
+        let start = std::time::Instant::now();
+        while lock_file.exists() {
+            if start.elapsed().as_secs() >= 10 {
+                bail!(
+                    "Timeout waiting for the {} file to be removed by other processes.",
+                    lock_file.display()
+                );
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        return Ok(true);
+    }
+    Ok(false)
+}
+
+#[cfg(test)]
+mod test {
+    use tempfile::tempdir;
+
+    use super::*;
+    use googletest::prelude::*;
+
+    #[googletest::test]
+    fn test_protoc_runs_without_error() {
+        let version = "28.0";
+        let temp_dir = tempdir().unwrap();
+
+        let result = protoc(version, temp_dir.path());
+        assert!(result.is_ok());
+    }
+
+    #[googletest::test]
+    // If one crate uses protoc_fetcher to download protoc, and a dependency crate of it also uses protoc_fetcher to the same directory.
+    // i.e. both crates are in the same workspace and download to the same workspace or cache directory, then there will be more than one
+    // process trying to download protoc to the same directory.
+    // This is the test case for that scenario.
+    fn test_two_processes_on_same_directory_1ms_apart_run_without_error() {
+        let version = "28.0";
+        let temp_dir = tempdir().unwrap();
+
+        let (tx, rx) = std::sync::mpsc::channel(); // Channel for thread communication
+
+        let handles: Vec<_> = (0..2)
+            .map(|i| {
+                let version = version.to_string();
+                let temp_dir = temp_dir.path().to_path_buf();
+                let tx = tx.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(i * 1));
+                    let result = protoc(&version, &temp_dir);
+                    tx.send((i, result)).expect("Failed to send result");
+                })
+            })
+            .collect();
+
+        // Wait for all threads to complete
+        for handle in handles {
+            handle.join().expect("Thread panicked");
+        }
+
+        let mut results = rx.iter().take(2).collect::<Vec<_>>();
+        results.sort_by_key(|&(i, _)| i);
+        let result_from_first = &results[0].1;
+        let result_from_second = &results[1].1;
+
+        verify_that!(result_from_first, ok(anything())).and_log_failure();
+        verify_that!(result_from_second, ok(anything())).and_log_failure();
+    }
 }
