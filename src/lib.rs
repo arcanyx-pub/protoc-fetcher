@@ -12,7 +12,7 @@ use std::fs;
 ///
 /// The release archive matching the given `version` will be downloaded, and the protoc binary will
 /// be extracted into a subdirectory of `out_dir`. You can choose a `version` from the
-/// [release] page, for example "21.2". Don't prefix it with a "v".
+/// [release] page, for example "31.1". Don't prefix it with a "v".
 ///
 /// `out_dir` can be anywhere you want, but if calling this function from a build script, you should
 /// probably use the `OUT_DIR` env var (which is set by Cargo automatically for build scripts).
@@ -27,7 +27,7 @@ use std::fs;
 /// # use std::path::Path;
 /// // From within build.rs...
 /// let out_dir = env::var("OUT_DIR").unwrap();
-/// let protoc_path = protoc_fetcher::protoc("21.2", Path::new(&out_dir));
+/// let protoc_path = protoc_fetcher::protoc("31.1", Path::new(&out_dir));
 /// ```
 ///
 /// If you are using [tonic-build] (or [prost-build]), you can instruct it to use the fetched
@@ -38,7 +38,7 @@ use std::fs;
 /// # use std::path::Path;
 /// # let out_dir = env::var("OUT_DIR").unwrap();
 /// # let path_to_my_protos = Path::new("a/b/c");
-/// # let protoc_path = protoc_fetcher::protoc("21.2", Path::new(&out_dir)).unwrap();
+/// # let protoc_path = protoc_fetcher::protoc("31.1", Path::new(&out_dir)).unwrap();
 /// env::set_var("PROTOC", &protoc_path);
 /// tonic_build::compile_protos(path_to_my_protos);
 /// ```
