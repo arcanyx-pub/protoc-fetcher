@@ -10,12 +10,12 @@ keywords = ["protoc", "grpc", "tonic", "protobuf", "prost"]
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/arcanyx-pub/protoc-fetcher"
-version = "0.1.1"
+version = "0.1.2"
 
 [dependencies]
 anyhow = "1.0.81"
-reqwest = { version = "0.11.27", features = ["blocking"] }
-zip-extract = { version = "0.1.3", features = ["deflate"] }
+reqwest = { version = "0.12.20", features = ["blocking"] }
+zip-extract = { version = "0.4.0", features = ["deflate"] }
 
 [dev-dependencies]
-tonic-build = "0.11.0"
+tonic-build = "0.13.1"
