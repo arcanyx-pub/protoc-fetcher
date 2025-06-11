@@ -17,8 +17,11 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Build
-      run: cargo build --verbose
+      run: cargo build --verbose --release
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --verbose --release
     - name: Check formatting
       run: cargo fmt --check --verbose
+    - name: Check Lint
+      # Fail on clippy warnings (-D warnings), and run clippy on tests too (--all-targets):
+      run: cargo clippy --all-targets -- -D warnings
