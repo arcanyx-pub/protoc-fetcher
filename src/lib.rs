@@ -3,10 +3,10 @@
 
 use anyhow::bail;
 use reqwest::StatusCode;
+use std::fs;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::fs;
 
 /// Downloads an official [release] of the protobuf compiler (protoc) and returns the path to it.
 ///
@@ -122,22 +122,26 @@ fn get_protoc_release_name(version: &str) -> String {
     #[allow(unused)]
     let name = "";
 
-    #[cfg(all(target_os = "linux", target_arch="aarch64"))]
+    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
     let name = "linux-aarch_64";
 
-    #[cfg(all(target_os = "linux", target_arch="x86"))]
+    #[cfg(all(target_os = "linux", target_arch = "x86"))]
     let name = "linux-x86_32";
 
-    #[cfg(all(target_os = "linux", target_arch="x86_64"))]
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     let name = "linux-x86_64";
 
-    #[cfg(all(target_os = "macos", target_arch="aarch64"))]
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     let name = "osx-aarch_64";
 
-    #[cfg(all(target_os = "macos", target_arch="x86_64"))]
+    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
     let name = "osx-x86_64";
 
-    #[cfg(all(target_os = "macos", not(target_arch="aarch64"), not(target_arch="x86_64")))]
+    #[cfg(all(
+        target_os = "macos",
+        not(target_arch = "aarch64"),
+        not(target_arch = "x86_64")
+    ))]
     let name = "osx-universal_binary";
 
     #[cfg(all(windows, target_pointer_width = "32"))]
@@ -146,7 +150,7 @@ fn get_protoc_release_name(version: &str) -> String {
     #[cfg(all(windows, target_pointer_width = "64"))]
     let name = "win64";
 
-    if name == "" {
+    if name.is_empty() {
         panic!("`protoc` unsupported platform");
     }
 
@@ -156,6 +160,6 @@ fn get_protoc_release_name(version: &str) -> String {
 }
 
 fn get_protoc_version(protoc_path: &Path) -> anyhow::Result<String> {
-    let version = String::from_utf8(Command::new(&protoc_path).arg("--version").output()?.stdout)?;
+    let version = String::from_utf8(Command::new(protoc_path).arg("--version").output()?.stdout)?;
     Ok(version)
 }
