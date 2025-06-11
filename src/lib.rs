@@ -6,7 +6,7 @@ use reqwest::StatusCode;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::{env, fs};
+use std::fs;
 
 /// Downloads an official [release] of the protobuf compiler (protoc) and returns the path to it.
 ///
@@ -91,7 +91,12 @@ fn download_protoc(protoc_dir: &Path, release_name: &str, version: &str) -> anyh
     zip_extract::extract(cursor, protoc_dir, false)?;
     println!("Extracted archive.");
 
+    #[cfg(unix)]
     let protoc_path = protoc_dir.join("bin/protoc");
+
+    #[cfg(windows)]
+    let protoc_path = protoc_dir.join("bin/protoc.exe");
+
     if !protoc_path.exists() {
         bail!("Extracted protoc archive, but could not find bin/protoc!");
     }
@@ -109,21 +114,45 @@ fn protoc_release_archive_url(release_name: &str, version: &str) -> String {
 }
 
 fn get_protoc_release_name(version: &str) -> String {
-    let mut platform = env::consts::OS;
-    let mut arch = env::consts::ARCH;
-    println!("Detected: {}, {}", platform, arch);
-
     // Adjust values to match the protoc release names. Examples:
     //   - linux 64-bit: protoc-21.2-linux-x86_64.zip
     //   - macos ARM: protoc-21.2-osx-aarch_64.zip
-    if platform == "macos" {
-        platform = "osx"; // protoc is stuck in the past XD
-    }
-    if arch == "aarch64" {
-        arch = "aarch_64";
+    //   - windows 32-bit: protoc-21.2-win32.zip
+
+    #[allow(unused)]
+    let name = "";
+
+    #[cfg(all(target_os = "linux", target_arch="aarch64"))]
+    let name = "linux-aarch_64";
+
+    #[cfg(all(target_os = "linux", target_arch="x86"))]
+    let name = "linux-x86_32";
+
+    #[cfg(all(target_os = "linux", target_arch="x86_64"))]
+    let name = "linux-x86_64";
+
+    #[cfg(all(target_os = "macos", target_arch="aarch64"))]
+    let name = "osx-aarch_64";
+
+    #[cfg(all(target_os = "macos", target_arch="x86_64"))]
+    let name = "osx-x86_64";
+
+    #[cfg(all(target_os = "macos", not(target_arch="aarch64"), not(target_arch="x86_64")))]
+    let name = "osx-universal_binary";
+
+    #[cfg(all(windows, target_pointer_width = "32"))]
+    let name = "win32";
+
+    #[cfg(all(windows, target_pointer_width = "64"))]
+    let name = "win64";
+
+    if name == "" {
+        panic!("`protoc` unsupported platform");
     }
 
-    format!("protoc-{version}-{platform}-{arch}")
+    println!("Detected: {}", name);
+
+    format!("protoc-{version}-{name}")
 }
 
 fn get_protoc_version(protoc_path: &Path) -> anyhow::Result<String> {
