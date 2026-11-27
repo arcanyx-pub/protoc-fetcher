@@ -88,7 +88,8 @@ fn download_protoc(protoc_dir: &Path, release_name: &str, version: &str) -> anyh
 
     fs::create_dir_all(protoc_dir)?;
     let cursor = Cursor::new(response.bytes()?);
-    zip_extract::extract(cursor, protoc_dir, false)?;
+    let mut zip = zip::ZipArchive::new(cursor)?;
+    zip.extract(protoc_dir)?;
     println!("Extracted archive.");
 
     #[cfg(unix)]
@@ -162,4 +163,19 @@ fn get_protoc_release_name(version: &str) -> String {
 fn get_protoc_version(protoc_path: &Path) -> anyhow::Result<String> {
     let version = String::from_utf8(Command::new(protoc_path).arg("--version").output()?.stdout)?;
     Ok(version)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[ignore = "Maybe offline"]
+    fn test_protoc() -> anyhow::Result<()> {
+        let out_dir = tempfile::tempdir().expect("Never");
+        let protoc_path = protoc("31.1", out_dir.path())?;
+        println!("protoc_path:{protoc_path:?}");
+        assert!(protoc_path.ends_with("protoc-fetcher/protoc-31.1-linux-x86_64/bin/protoc"));
+        Ok(())
+    }
 }
