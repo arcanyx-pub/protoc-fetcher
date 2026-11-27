@@ -11,12 +11,11 @@ categories = [
 description = "Fetches official Protocol Buffer compiler (protoc) releases for use in build scripts"
 documentation = "https://docs.rs/protoc-fetcher"
 edition = "2021"
-homepage = "https://github.com/arcanyx-pub/protoc-fetcher"
 keywords = ["protoc", "grpc", "tonic", "protobuf", "prost"]
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/arcanyx-pub/protoc-fetcher"
-version = "0.1.2"
+version = "0.1.3"
 
 [dependencies]
 anyhow = { version = "1" }
