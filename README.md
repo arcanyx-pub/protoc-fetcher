@@ -42,7 +42,7 @@ let out_dir = env::var("OUT_DIR").unwrap();
 let path_to_my_protos = Path::new("a/b/c");
 let protoc_path = protoc_fetcher::protoc("31.1", Path::new(&out_dir)).unwrap();
 env::set_var("PROTOC", &protoc_path);
-tonic_build::compile_protos(path_to_my_protos);
+tonic_prost_build::compile_protos(path_to_my_protos);
 ```
 
 [release]: https://github.com/protocolbuffers/protobuf/releases
