@@ -19,10 +19,10 @@ repository = "https://github.com/arcanyx-pub/protoc-fetcher"
 version = "0.1.2"
 
 [dependencies]
-anyhow = "1.0.81"
-reqwest = { version = "0.12.20", features = ["blocking"] }
+anyhow = { version = "1" }
+reqwest = { version = "0.13", features = ["blocking"] }
 zip = { version = "9", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
-tonic-build = "0.13.1"
+tonic-prost-build = { version = "0.14" }
 tempfile = { version = "3" }
